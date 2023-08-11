@@ -2,6 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\PostStoreRequest;
+use App\Http\Requests\PostUpdateRequest;
+use App\Http\Resources\PostResource;
 use App\Models\Post;
 use App\Models\Image;
 use Illuminate\Http\Request;
@@ -21,19 +24,14 @@ class PostController extends Controller
     /**
      * Store a newly created resource in storage.
      */
-    public function store(Request $request)
+    public function store(PostStoreRequest $request)
     {
-        $validatedData = $request->validate([
-            'name' => 'required|string|max:255',
-            'image_url' => 'required|url',
-        ]);
+        $post = Post::create(['name' => $request->name]);
 
-        $post = Post::create(['name' => $validatedData['name']]);
-
-        $image = new Image(['url' => $validatedData['image_url']]);
+        $image = new Image(['url' => $request->image_url]);
         $post->images()->save($image);
 
-        return response()->json(['message' => 'Post created successfully', 'data' => $post], 201);
+        return response()->json(['message' => 'Post created successfully', 'data' => new PostResource($post)], 201);
     }
 
     /**
@@ -41,15 +39,40 @@ class PostController extends Controller
      */
     public function show(string $id)
     {
-        //
+        $post = Post::find($id);
+        if (!$post) {
+            return response()->json([
+                'message' => 'Post not found',
+            ], 404);
+        }
+
+        return response()->json([
+            'post' => new PostResource($post),
+        ]);
     }
 
     /**
      * Update the specified resource in storage.
      */
-    public function update(Request $request, string $id)
+    public function update(PostUpdateRequest $request, string $id)
     {
-        //
+        $post = Post::find($id);
+
+        if (!$post) {
+            return response()->json([
+                'message' => 'Post not found',
+            ], 404);
+        }
+
+        $post->update(['name' => $request->name]);
+
+        if ($request->has('image_url')) {
+            $image = $post->images()->firstOrNew(['imageable_id' => $post->id, 'imageable_type' => Post::class]);
+            $image->url = $request->image_url;
+            $image->save();
+        }
+
+        return response()->json(['message' => 'Post updated successfully', 'data' => new PostResource($post)]);
     }
 
     /**
@@ -57,6 +80,16 @@ class PostController extends Controller
      */
     public function destroy(string $id)
     {
-        //
+        $post = Post::find($id);
+
+        if (!$post) {
+            return response()->json([
+                'message' => 'Post not found',
+            ], 404);
+        }
+        $post->images()->delete();
+        $post->delete();
+
+        return response()->json(['message' => 'Post deleted successfully']);
     }
 }
